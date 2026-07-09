@@ -39,7 +39,10 @@ Ah, il mio codice non è sempre perfetto al primo colpo e imparo cose nuove a og
 ![QGIS](https://img.shields.io/badge/QGIS-589632?style=for-the-badge&logo=qgis&logoColor=white)
 
 **AI, Tooling & IDE** <br>
-![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white) ![VS Code](https://img.shields.io/badge/VS_Code-0078D4?style=for-the-badge&logo=visual%20studio%20code&logoColor=white) ![GitHub Copilot](https://img.shields.io/badge/github%20copilot-121011?style=for-the-badge&logo=github%20copilot&logoColor=white)
+![Antigravity](https://img.shields.io/badge/Antigravity-4285F4?style=for-the-badge&logo=google&logoColor=white) ![Claude](https://img.shields.io/badge/Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white) ![Cursor](https://img.shields.io/badge/Cursor-000000?style=for-the-badge&logo=cursor&logoColor=white) ![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white) ![VS Code](https://img.shields.io/badge/VS_Code-0078D4?style=for-the-badge&logo=visual%20studio%20code&logoColor=white) ![GitHub Copilot](https://img.shields.io/badge/github%20copilot-121011?style=for-the-badge&logo=github%20copilot&logoColor=white)
+
+**SEO & SEM** <br>
+![SEOZoom](https://img.shields.io/badge/SEOZoom-FF6600?style=for-the-badge&logoColor=white) ![Google Ads](https://img.shields.io/badge/Google_Ads-4285F4?style=for-the-badge&logo=googleads&logoColor=white)
 
 ---
 
