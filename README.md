@@ -36,11 +36,10 @@ Ah, il mio codice non è sempre perfetto al primo colpo e imparo cose nuove a og
 ### 📂 I Miei Case Study (System Design & NDA)
 *Poiché gran parte dei miei lavori più complessi è sotto NDA, in questa sezione analizzo le architetture, le sfide tecniche e il System Design delle soluzioni che ho sviluppato, senza esporre codice proprietario.*
 
-* 🚧 **[SaaS Multi-tenant per Gestione Ordini e Code](#)** - *SvelteKit, Supabase, Vercel*
-* 🚧 **[Integrazione E-commerce & Automazione Workflow](#)** - *n8n, Odoo, Docker*
-* 🚧 **[Setup Infrastruttura Locale & Print Server Aziendali](#)** - *Hardware, Linux, Rete*
-
-*(I link sono attualmente in lavorazione!)*
+* 🍣 **[Gestionale Ristorante PWA — Mobile-First](case-studies/01-gestionale-ristorante-pwa.md)** - *React, Supabase Realtime, Vercel, Raspberry Pi Zero 2W* · [🔗 Live](https://poke.cucinadasandro.it)
+* 🦷 **[Portale Studio Dentistico — Lead Generation Premium](case-studies/02-portale-dentistico-lead-generation.md)** - *Next.js 15, Payload CMS, TypeScript, GDPR* · [🔗 Live](https://www.studioodontoiatricofrancescobruno.it/)
+* 📱 **[Notifiche WhatsApp Gratuite — VPS + Evolution API](case-studies/03-whatsapp-gratuito-vps-evolution-api.md)** - *Docker, Node.js Worker, PM2, VPS Aruba*
+* 🎪 **[SaaS Multi-Tenant — SvelteKit per Sagre e Feste](case-studies/04-saas-multi-tenant-sveltekit.md)** - *SvelteKit, Supabase RLS, Multi-Tenancy*
 
 ---
 📫 **Come contattarmi:** luca.ginolfi@gmail.com
