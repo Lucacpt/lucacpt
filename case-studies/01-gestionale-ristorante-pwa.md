@@ -1,179 +1,140 @@
-# 🍣 Gestionale Ristorante PWA — Mobile-First
+# Gestionale ristorante: PWA mobile-first
 
-> **Case Study: System Design & Architettura**
-> Stack: Vite + React + Supabase + Tailwind · Deploy: Vercel (PWA) + Raspberry Pi Zero 2W
->
-> 🔗 **Live:** [poke.cucinadasandro.it](https://poke.cucinadasandro.it)
+| | |
+|---|---|
+| Tipo | Gestionale operativo per un ristorante di poke |
+| Stack | Vite, React, Tailwind, Supabase (Postgres, Auth, Realtime, Storage, Edge Functions) |
+| Hosting | Vercel (PWA, funzioni serverless, cron) e Raspberry Pi Zero 2W in sede |
+| Periodo | Febbraio - luglio 2026, 157 commit |
+| Stato | In produzione |
+| Link | [poke.cucinadasandro.it](https://poke.cucinadasandro.it) |
 
 ---
 
-## Il Problema
+## Problema
 
-Un ristorante pokè in crescita gestiva tutto con carta, WhatsApp e memoria umana: ordini, tavoli, prenotazioni, inventario. Serviva una soluzione digitale completa che lo staff potesse usare **dai propri smartphone e tablet**, senza installare app da store, senza PC fissi in sala e con costi infrastrutturali vicini allo zero.
+Ordini, tavoli, prenotazioni e magazzino erano gestiti su carta e WhatsApp. Il personale doveva lavorare da smartphone e tablet propri, senza installare app dagli store e senza PC in sala. L'infrastruttura doveva costare quasi zero.
 
-## La Soluzione
+## Soluzione
 
-Una **Progressive Web App (PWA)** installabile direttamente sulla home screen dei dispositivi dello staff. L'applicazione copre l'intero ciclo operativo del ristorante: dalla composizione dell'ordine lato cliente, alla gestione di sala, cucina, prenotazioni, inventario e statistiche avanzate.
-
-Ogni interfaccia è progettata **mobile-first**: i camerieri gestiscono i tavoli dal tablet in sala, la cucina riceve le comande in tempo reale, il titolare monitora le statistiche dal telefono.
+Una Progressive Web App installabile sulla home dei dispositivi. Copre l'intero ciclo: composizione della bowl da parte del cliente, sala, cucina, prenotazioni, magazzino, statistiche e un modulo separato per le feste di paese.
 
 ---
 
 ## Architettura
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    VERCEL (Edge Network)                     │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │ PWA/SPA  │  │  Serverless  │  │    Cron Functions      │ │
-│  │ (React)  │  │  Functions   │  │  (Reminder/Notifiche)  │ │
-│  └────┬─────┘  └──────┬───────┘  └───────────┬────────────┘ │
-└───────┼───────────────┼───────────────────────┼─────────────┘
-        │               │                       │
-        ▼               ▼                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 SUPABASE (Cloud BaaS)                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
-│  │ Postgres │  │   Auth   │  │ Realtime │  │  Storage   │  │
-│  │  + RLS   │  │ (Ruoli)  │  │  (Live)  │  │  (Media)   │  │
-│  └──────────┘  └──────────┘  └─────┬────┘  └────────────┘  │
-└────────────────────────────────────┼────────────────────────┘
-                                     │
-                                     ▼
-                        ┌────────────────────────┐
-                        │  RASPBERRY PI ZERO 2W  │
-                        │  ┌──────────────────┐  │
-                        │  │  Print Server    │  │
-                        │  │  (Node.js)       │  │
-                        │  └────────┬─────────┘  │
-                        └───────────┼────────────┘
-                                    ▼
-                        ┌────────────────────────┐
-                        │  STAMPANTE TERMICA      │
-                        │  ESC/POS (USB/Network)  │
-                        └────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     VERCEL                                │
+│  PWA (React)   Funzioni API (SMS, email, punti)   Cron    │
+└───────┬──────────────────┬──────────────────────┬────────┘
+        │                  │                      │
+        ▼                  ▼                      ▼
+┌──────────────────────────────────────────────────────────┐
+│                     SUPABASE                              │
+│  Postgres   Auth (ruoli)   Realtime   Storage   Edge Fn   │
+└──────────────────────────┬───────────────────────────────┘
+                           │ Realtime
+              ┌────────────┴─────────────┐
+              ▼                          ▼
+   ┌─────────────────────┐   ┌─────────────────────────┐
+   │ Raspberry Pi Zero 2W│   │ PC Windows (feste)      │
+   │ print server Node.js│   │ festa-printer.exe       │
+   └──────────┬──────────┘   └───────────┬─────────────┘
+              ▼                          ▼
+        Stampante termica ESC/POS (USB o rete)
 ```
 
-### Comunicazioni Esterne
-| Servizio | Scopo | Provider |
-|----------|-------|----------|
-| Email | Conferme prenotazione, reminder, alert inventario | SMTP proprietario |
-| SMS | Notifiche urgenti | API Aruba |
+| Integrazione | Uso |
+|--------------|-----|
+| SMTP | Conferme prenotazione, recap giornaliero, alert magazzino |
+| SMS (Aruba) | Notifiche urgenti |
+| TheFork | Webhook e client OAuth come Supabase Edge Function |
 
 ---
 
-## I 4 Macro-Moduli
+## Moduli
 
-Il sistema è organizzato con una **feature-based architecture** in 4 moduli indipendenti:
+**Builder (cliente)**
+Configuratore della bowl in più passaggi, con limiti sugli ingredienti e prezzo calcolato in tempo reale. Bowl condivisibili via link, bowl casuale pesata, inviti con codice referral.
 
-### 1. Builder — Configuratore Pokè
-Configuratore multi-step con validazione ingredienti, massimali e calcolo prezzo dinamico. Interfaccia touch-friendly pensata per il cliente che ordina da asporto dal proprio smartphone.
+**Sala**
+- Stato dei tavoli e delle comande sincronizzato tra dispositivi con Supabase Realtime
+- Ciclo della comanda: `pending → preparing → completed → served`
+- Conto con sconti, coperti, note e chiusura
+- Mappa della sala con drag and drop, alternabile alla vista elenco
 
-### 2. Waiter (Sala) — Gestione Tavoli Mobile
-Il cuore operativo per i camerieri che usano il **tablet in sala**:
-- Gestione tavoli in tempo reale con aggiornamenti via Supabase Realtime
-- Comande con pipeline di stati: `pending → preparing → completed → served`
-- Gestione conto: sconti (% o fisso), coperti, note, chiusura
-- **Mappa sala interattiva** con drag & drop nativo per riposizionare i tavoli
-- Toggle tra vista lista e vista mappa
-- Quick order modal per ordini rapidi
+**Amministrazione (12 sezioni)**
+Ordini, consegnati, menu bowl, menu ristorante e cantina, prodotti, clienti, impostazioni, staff, statistiche, prenotazioni, magazzino, archivio. Include export CSV, KPI (incasso, coperti, scontrino medio, occupazione) e programma punti fedeltà.
 
-### 3. Admin — Dashboard Completa (22 Pannelli)
-- CRUD menù ristorante, cantina vini, menù fissi, categorie con ordinamento e icone
-- Prenotazioni web + manuali (telefono) con reminder automatici
-- Staff con ruoli e permessi
-- Inventario con alert sotto-scorta e email automatica a fine giornata
-- Statistiche: incassi giornalieri/settimanali/mensili, piatti top, fasce orarie
-- KPI: revenue, covers, avg ticket, occupancy rate
-- Storico comande con filtri e **export CSV**
-- Programma fedeltà a punti
-
-### 4. Festa — Modulo Eventi
-Modulo dedicato per sagre e feste:
-- Dashboard ordini rapidi con flusso semplificato
-- Display ordini per il pubblico (monitor esterno)
-- Stampa ticket con formattazione termica
-- Configurazione evento (prodotti, prezzi, sconti, omaggi)
+**Festa**
+Modulo per eventi ad alto volume: cassa rapida, display pubblico con sintesi vocale e QR, tracking dell'ordine via token, coupon stampati, gestione omaggi e allergeni.
 
 ---
 
-## Database Design
+## Numeri
 
-**~15 tabelle** con schema relazionale su PostgreSQL (Supabase):
-
-```
-tables ──────────┐
-table_sessions ──┤
-orders ──────────┼── Core Sala & Comande
-order_items ─────┤
-                 │
-menu_items ──────┤
-menu_categories ─┼── Menù & Cantina
-wine_list ───────┤
-fixed_menus ─────┘
-
-reservations ────┐
-reservation_     ├── Prenotazioni
-  settings ──────┘
-
-inventory ───────── Magazzino
-
-customers ───────── Anagrafica & Fedeltà
-```
-
-### Row Level Security (RLS)
-Ogni ruolo (Admin, Waiter, Kitchen, Customer) ha policy SQL granulari che isolano i dati. Un cameriere vede solo i tavoli e le comande della propria sessione; un cliente vede solo i propri ordini e il proprio profilo fedeltà.
-
-### Realtime Subscriptions
-Le comande e gli stati dei tavoli si sincronizzano in tempo reale tra tutti i dispositivi dello staff tramite i canali Realtime di Supabase. Quando la cucina segna un piatto come "completato", il tablet del cameriere in sala si aggiorna istantaneamente.
+| Voce | Valore |
+|------|--------|
+| Route dell'applicazione | 30 |
+| Migration SQL | 39 |
+| Tabelle (da migration) | circa 33 |
+| Funzioni API | 6 |
+| Test unitari (Vitest) | 81 in 19 file |
+| Suite E2E (Playwright) | 3 |
 
 ---
 
-## Print Server Hardware
+## Sicurezza dei dati
 
-Il problema della stampa comande è risolto con un approccio **ibrido cloud + hardware locale** a costo quasi zero:
-
-| Componente | Costo |
-|-----------|-------|
-| Raspberry Pi Zero 2W | ~€15 |
-| Alimentatore + SD Card | ~€10 |
-| Stampante termica ESC/POS | Già in dotazione |
-
-Il servizio Node.js sul RPi si connette a Supabase Realtime, ascolta i nuovi ordini e li formatta secondo il protocollo ESC/POS per la stampante termica. Per gli eventi su postazioni Windows è disponibile anche un eseguibile compilato.
+- Row Level Security su Postgres con policy per ruolo: admin, sala, cucina, cliente
+- Autenticazione Supabase con ruoli assegnati dal pannello staff
+- Nessun dato personale nella cache del dispositivo (vedi sotto)
+- Tabelle dedicate per log di sicurezza, errori e consensi cookie
+- Security review periodica su database e print server
 
 ---
 
-## Testing & Quality Assurance
+## PWA e cache
 
-| Tipo | Tool | Copertura |
-|------|------|-----------|
-| **Unit** | Vitest + React Testing Library | Utilities logiche, hooks critici, render dinamico menù |
-| **E2E** | Playwright | Login per ruolo, ordine da tablet, evasione cucina, checkout asporto |
-| **Target** | Coverage | 85% sul codice critico |
+Configurata con `vite-plugin-pwa`, aggiornamento automatico.
 
----
-
-## Fasi di Sviluppo
-
-| # | Fase | Stato |
-|---|------|-------|
-| 1 | Menù Digitale Completo + Cantina Vini | ✅ |
-| 2 | Gestione Tavoli, Comande & Conto | ✅ |
-| 3 | Prenotazione Tavoli + Reminder | ✅ |
-| 4 | Mappa Sala Interattiva | ✅ |
-| 5 | Magazzino & Inventario | ✅ |
-| 6 | Statistiche Avanzate & Storico | ✅ |
-| 7 | Integrazione TheFork | 🚧 In attesa credenziali API |
-| 8 | Testing & QA | ✅ Infrastruttura + test implementati |
+| Risorsa | Strategia | Motivo |
+|---------|-----------|--------|
+| Navigazione | NetworkFirst, timeout 5 s, fallback `offline.html` | Il personale vede sempre dati aggiornati |
+| Immagini e font | CacheFirst, 30 giorni | Riduce traffico su rete mobile |
+| `/api/*` e Supabase | NetworkOnly | Nessun dato personale nella cache del dispositivo |
 
 ---
 
-## Decisioni Architetturali Chiave
+## Stampa
 
-| Decisione | Scelta | Motivazione |
-|-----------|--------|-------------|
-| App nativa vs PWA | **PWA** | Aggiornamenti immediati, no app store, installabile su qualsiasi dispositivo |
-| Database separato per menù | **Tabella `menu_items` dedicata** | Non estendere la tabella `signature_items` del builder pokè |
-| Pagamenti | **Solo tracking stato** | La cassa fisica gestisce il pagamento, il gestionale traccia solo aperto/chiuso |
-| Print server | **RPi Zero 2W locale** | Costo <€30 vs SaaS a pagamento, latenza zero |
-| Reminder prenotazioni | **Funzionanti per tutte le fonti** | Web + manuali (telefono) + futuro TheFork |
+Il print server gira su un Raspberry Pi Zero 2W (circa 25 euro tra scheda, alimentatore e SD). Il servizio Node.js ascolta i nuovi ordini via Realtime e li stampa in formato ESC/POS sulla termica già presente.
+
+Per le feste, dove si usa un PC Windows al banco, c'è un secondo print server (Express e `node-thermal-printer`) distribuito come eseguibile singolo, così non serve installare Node sul posto.
+
+---
+
+## Scelte principali
+
+| Decisione | Scelta | Motivo |
+|-----------|--------|--------|
+| App nativa o PWA | PWA | Nessuno store, aggiornamenti immediati, gira su qualsiasi dispositivo |
+| Pagamenti | Solo stato aperto/chiuso | L'incasso resta sulla cassa fiscale esistente |
+| Stampa | Raspberry Pi in sede | Meno di 30 euro una tantum contro un abbonamento SaaS, latenza locale |
+| Menu ristorante | Tabella `menu_items` separata | Evita di piegare lo schema del builder a un uso diverso |
+| Automazioni | Cron Vercel | Recap giornaliero e controllo magazzino senza un server dedicato |
+
+---
+
+## Evoluzioni previste
+
+Da un'analisi successiva al rilascio sono emerse queste implementazioni per la prossima versione:
+
+| Evoluzione | Beneficio |
+|------------|-----------|
+| Schedulare i promemoria delle prenotazioni, già implementati | Meno tavoli vuoti per mancata presentazione |
+| Attivare l'integrazione TheFork in produzione | Prenotazioni esterne nello stesso flusso di quelle interne |
+| Calcolare prezzi e sconti in funzioni Postgres | Il client invia solo la composizione dell'ordine, una sola fonte di verità per gli importi |
+| Portare la copertura dei test verso la soglia dell'85% già configurata, con E2E sui flussi per ruolo | Rilasci più rapidi con meno verifiche manuali |
+| Coda degli ordini offline per la sala | La sala continua a lavorare anche con rete instabile |

@@ -1,145 +1,117 @@
-# 📱 Notifiche WhatsApp Gratuite — VPS + Evolution API
+# Notifiche WhatsApp self-hosted: VPS ed Evolution API
 
-> **Case Study: Infrastruttura Self-Hosted**
-> Stack: Node.js Worker + Evolution API + Redis + Docker · Infra: VPS Aruba (Ubuntu)
+| | |
+|---|---|
+| Tipo | Promemoria appuntamenti per un centro estetico |
+| Stack | Node.js, Evolution API, Redis 7, Docker Compose, PM2, Supabase |
+| Infrastruttura | VPS Aruba, Ubuntu 24.04, 1 vCPU, 2 GB RAM |
+| Stato | Prototipo, sospeso per motivi esterni al progetto |
+
+Fa parte del gestionale del centro estetico (SvelteKit, Supabase, ruoli admin e cliente). Lo documento per la parte infrastrutturale.
 
 ---
 
-## Il Problema
+## Problema
 
-Un'attività commerciale necessitava di inviare **reminder automatici via WhatsApp** ai propri clienti (es. appuntamenti del giorno successivo). Le soluzioni SaaS di messaggistica (Twilio, MessageBird, ecc.) hanno costi ricorrenti per messaggio che diventano significativi su volumi anche modesti. Serviva un'alternativa a **costo zero per messaggio**.
+Il centro voleva mandare ai clienti un promemoria WhatsApp il giorno prima dell'appuntamento. I servizi di messaggistica a pagamento (Twilio, MessageBird e simili) costano per messaggio, e anche su volumi piccoli la spesa mensile non era giustificata.
 
-## La Soluzione
+## Soluzione
 
-Un'architettura a 3 livelli completamente **self-hosted** su una VPS economica, che sfrutta le API di WhatsApp Web tramite Evolution API (open-source) per inviare messaggi senza costi per singolo invio.
-
-> ⚠️ Questo progetto non è stato portato a termine per motivi esterni. Viene documentato come case study architetturale per le competenze infrastrutturali acquisite.
+Tre componenti su una VPS economica: un gateway WhatsApp open source in container, Redis per le sessioni, e un worker Node.js che legge gli appuntamenti da Supabase e invia i messaggi. Nessuna porta esposta oltre SSH: il worker lavora in pull.
 
 ---
 
 ## Architettura
 
 ```
-┌──────────────────────────────────────────────────────┐
-│               VPS ARUBA (Ubuntu 24.04)                │
-│               1 vCPU · 2GB RAM                        │
-│                                                        │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │              DOCKER COMPOSE                       │ │
-│  │  ┌────────────────┐    ┌───────────────────────┐ │ │
-│  │  │ Evolution API  │◄──►│   Redis 7 (Alpine)    │ │ │
-│  │  │  (WhatsApp)    │    │   AOF + LRU 128MB     │ │ │
-│  │  │  Max 512MB RAM │    └───────────────────────┘ │ │
-│  │  │  Porta 8080    │                               │ │
-│  │  │  (solo local)  │                               │ │
-│  │  └───────▲────────┘                               │ │
-│  └──────────┼────────────────────────────────────────┘ │
-│             │                                          │
-│  ┌──────────┴────────┐                                 │
-│  │  Worker Node.js   │──────► Supabase (Cloud)         │
-│  │  gestito da PM2   │        Query appuntamenti       │
-│  │  Polling 30 min   │        Aggiorna stati           │
-│  └───────────────────┘                                 │
-│                                                        │
-│  🔒 UFW: porta 8080 bloccata dall'esterno              │
-└──────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│ VPS Aruba (Ubuntu 24.04, 1 vCPU, 2 GB)             │
+│                                                    │
+│  ┌──────────── Docker Compose ──────────────────┐  │
+│  │  Evolution API (max 512 MB)  ◄──►  Redis 7   │  │
+│  │  porta 8080 solo localhost        AOF, LRU   │  │
+│  └──────────────▲───────────────────────────────┘  │
+│                 │                                  │
+│  ┌──────────────┴─────┐                            │
+│  │ Worker Node.js     │ ────► Supabase (cloud)     │
+│  │ PM2, ogni 30 min   │       legge appuntamenti,  │
+│  └────────────────────┘       aggiorna lo stato    │
+│                                                    │
+│  UFW: 8080 chiusa dall'esterno                     │
+└────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## I 3 Livelli
+## Componenti
 
-### 1. Evolution API (Container Docker)
-Gateway open-source che espone REST API per WhatsApp Web. Gestisce la sessione WhatsApp (pairing via QR Code) e l'invio/ricezione messaggi.
+**Evolution API**
 
 | Parametro | Valore |
 |-----------|--------|
-| Immagine | `atendai/evolution-api:latest` |
-| RAM limit | 512MB |
-| Porta | 8080 (solo localhost) |
-| Autenticazione | API Key generata con `openssl rand -hex 32` |
+| Ruolo | Gateway REST verso WhatsApp Web, abbinamento con QR code |
+| Limite RAM | 512 MB |
+| Rete | Porta 8080 solo su localhost |
+| Autenticazione | API key generata con `openssl rand -hex 32` |
 
-### 2. Redis (Cache & Sessioni)
-Supporto per Evolution API: caching sessioni WhatsApp, persistence AOF per sopravvivere ai riavvii.
+**Redis**
 
 | Parametro | Valore |
 |-----------|--------|
 | Immagine | `redis:7-alpine` |
-| Memoria max | 128MB |
-| Politica eviction | `allkeys-lru` |
-| Healthcheck | `redis-cli ping` ogni 10s |
+| Memoria | 128 MB, eviction `allkeys-lru` |
+| Persistenza | AOF, per non perdere la sessione al riavvio |
+| Healthcheck | `redis-cli ping` ogni 10 s |
 
-### 3. Worker Node.js (PM2)
-Processo long-running che orchestra il ciclo di notifiche:
+**Worker**
 
 ```
-┌─────────┐     ┌──────────────┐     ┌───────────────┐     ┌──────────┐
-│  POLL   │────►│  QUERY       │────►│  COMPONI      │────►│  INVIA   │
-│ (30min) │     │  Supabase    │     │  Messaggio    │     │  WhatsApp│
-└─────────┘     │  Appuntamenti│     │  Personaliz.  │     │  via API │
-                │  24-28h      │     └───────────────┘     └─────┬────┘
-                └──────────────┘                                  │
-                                                                  ▼
-                                                         ┌──────────────┐
-                                                         │  AGGIORNA    │
-                                                         │  Stato DB    │
-                                                         │  ✅ inviato  │
-                                                         │  ❌ errore   │
-                                                         └──────────────┘
+ogni 30 min ──► appuntamenti tra 24 e 28 ore ──► compone il messaggio ──► invia ──► stato: inviato | errore
 ```
 
-**Logica di Polling:**
-- Finestra temporale: appuntamenti tra 24 e 28 ore da "adesso"
-- Filtra solo stati `in_attesa` o `errore` (retry automatico)
-- Rate limiting: 2 secondi di pausa tra ogni messaggio (anti-ban WhatsApp)
-- Stato tracciato su Supabase: `in_attesa → inviato | errore`
-
-**Messaggio generato:**
-```
-✨ Promemoria [Nome Attività] ✨
-
-Ciao [Nome]! 👋
-
-Ti ricordiamo il tuo appuntamento:
-
-📅 Martedì 15 luglio
-🕐 Ore 10:30
-💆 [Trattamento] (~45 min)
-
-Ti aspettiamo! 💕
-Per disdire o spostare, rispondi a questo messaggio.
-```
+- Prende solo righe in stato `in_attesa` o `errore`, quindi i fallimenti vengono ritentati al giro successivo
+- 2 secondi di pausa tra un invio e l'altro, per non far segnalare il numero
+- PM2 con riavvio oltre 64 MB di memoria
 
 ---
 
 ## Sicurezza
 
-| Misura | Implementazione |
-|--------|----------------|
-| Evolution API non esposta | UFW blocca porta 8080 dall'esterno |
-| Accesso Worker | Solo `localhost:8080` sulla stessa VPS |
-| Credenziali Supabase | Service Role Key (bypassa RLS), solo nel Worker |
-| API Key Evolution | Generata con entropia crittografica (`openssl rand`) |
-| Pairing WhatsApp | QR Code accessibile solo da browser locale/VPN |
+| Rischio | Misura |
+|---------|--------|
+| Gateway raggiungibile da internet | UFW blocca la 8080, il worker chiama `localhost` |
+| Chiave Supabase con privilegi elevati | Presente solo nel worker sulla VPS |
+| Abbinamento WhatsApp | QR accessibile solo da tunnel locale |
 
 ---
 
 ## Costi
 
-| Voce | Costo |
-|------|-------|
-| VPS Aruba (1 vCPU, 2GB RAM) | ~€3-5/mese |
-| Messaggi WhatsApp | **€0** (nessun costo per invio) |
-| Supabase | Free tier sufficiente |
-| **Totale** | **~€5/mese** vs €50-200/mese per SaaS equivalenti |
+| Voce | Costo mensile |
+|------|---------------|
+| VPS | 3-5 euro |
+| Messaggi | 0 |
+| Supabase | Free tier |
+| Totale | circa 5 euro, contro 50-200 euro di un servizio equivalente |
 
 ---
 
-## Competenze Acquisite
+## Scelte principali
 
-- Setup e gestione VPS Linux con Docker in produzione
-- Self-hosting di Evolution API per WhatsApp Business senza costi
-- Architettura Worker con polling, gestione stati asincroni e retry
-- Docker Compose con healthcheck, resource limits e network isolation
-- Sicurezza: firewall UFW, isolamento rete, gestione secrets
-- PM2 per process management Node.js in produzione
+| Decisione | Scelta | Motivo |
+|-----------|--------|--------|
+| Gateway | Evolution API su sessione WhatsApp Web | Costo zero per messaggio, adatto ai volumi di una singola attività |
+| Modello di invio | Worker in pull | Nessuna porta in ingresso da esporre sulla VPS |
+| Risorse | Limiti di memoria su container e processi | Tutto lo stack sta in 2 GB di RAM |
+
+---
+
+## Evoluzioni previste
+
+Da un'analisi successiva al prototipo sono emerse queste implementazioni per la prossima versione:
+
+| Evoluzione | Beneficio |
+|------------|-----------|
+| Un solo percorso di invio, il worker in pull, al posto del doppio canale worker e cron | Nessun rischio di invii duplicati, gateway mai esposto |
+| Immagine Evolution API fissata a una versione precisa | Deploy riproducibili, aggiornamenti controllati |
+| WhatsApp Cloud API ufficiale oltre una certa soglia di volumi | Servizio scalabile e conforme per più clienti |

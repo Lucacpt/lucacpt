@@ -1,74 +1,70 @@
-# 🎪 SaaS Multi-Tenant — SvelteKit per Sagre e Feste
+# SaaS multi-tenant per sagre e feste
 
-> **Case Study: Architettura Multi-Tenant**
-> Stack: SvelteKit 2 + Svelte 5 + Supabase + Tailwind · Deploy: Vercel
-
----
-
-## Il Problema
-
-Sagre, feste paesane e eventi gastronomici locali hanno bisogno di gestire ordini, menù e flussi di cassa durante eventi ad alta intensità (centinaia di ordini in poche ore). Serviva una piattaforma **multi-tenant** dove ogni evento avesse il proprio spazio isolato, con un pannello admin centralizzato per la gestione.
-
-## La Soluzione
-
-Un'architettura **slug-based multi-tenancy** con SvelteKit, dove ogni sagra è accessibile tramite il proprio URL (`/nome-sagra`) e i dati sono completamente isolati a livello di database tramite RLS.
-
-> ⚠️ Questo progetto non è stato portato a termine. Viene documentato come case study per l'architettura multi-tenant e la gestione di volumi elevati di sviluppo in tempi compressi.
+| | |
+|---|---|
+| Tipo | Preordini e cassa per eventi gastronomici, più eventi sulla stessa piattaforma |
+| Stack | SvelteKit 2, Svelte 5, Supabase (Postgres, Realtime), Tailwind, Vercel Edge |
+| Periodo | Maggio 2026 |
+| Stato | Prototipo |
 
 ---
 
-## Architettura Multi-Tenant
+## Problema
+
+Le sagre ricevono centinaia di ordini in poche ore. Ogni evento ha menu, prezzi e casse propri, ma rifare il software per ogni sagra non ha senso. Serviva una piattaforma unica in cui ogni evento avesse uno spazio separato.
+
+## Soluzione
+
+Multi-tenancy basata sullo slug nell'URL (`/nome-sagra`). Ogni richiesta risolve lo slug nel tenant e carica solo i suoi dati. Il pannello di gestione mostra gli ordini in tempo reale e le statistiche calcolate dal database.
+
+---
+
+## Architettura
 
 ```
-URL: /sagra-del-pesce           URL: /festa-della-birra
-         │                               │
-         ▼                               ▼
-┌─────────────────────────────────────────────────┐
-│            SvelteKit (App Router)                 │
-│                                                   │
-│   /(tenant)/[sagra_slug]/+page.server.ts          │
-│         │                                         │
-│         ├── Risolve slug → tenant_id              │
-│         ├── Carica dati filtrati per tenant        │
-│         └── Renderizza server-side                │
-│                                                   │
-│   /admin/+page.server.ts                          │
-│         └── Gestione centralizzata tutte le sagre │
-└───────────────────────┬─────────────────────────┘
-                        │
+/sagra-del-pesce              /festa-della-birra
+        │                             │
+        ▼                             ▼
+┌────────────────────────────────────────────────┐
+│ SvelteKit (runtime edge)                        │
+│                                                 │
+│  /[sagra_slug]   slug → tenant, prodotti        │
+│  /admin          ordini live, statistiche       │
+└───────────────────────┬────────────────────────┘
                         ▼
-┌───────────────────────────────────────────────────┐
-│              SUPABASE (PostgreSQL + RLS)            │
-│                                                     │
-│   ┌─────────────────────────────────────────────┐  │
-│   │  RLS Policy: tenant_id = current_tenant()    │  │
-│   │  Ogni query è automaticamente filtrata       │  │
-│   └─────────────────────────────────────────────┘  │
-│                                                     │
-│   Auth SSR (@supabase/ssr + hooks.server.ts)       │
-└───────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│ Supabase                                        │
+│  sagre, prodotti, ordini, elementi_ordine       │
+│  vista v_statistiche_sagra                      │
+│  canale Realtime su ordini                      │
+└────────────────────────────────────────────────┘
 ```
-
-### Pattern di Routing SvelteKit
-
-| Route | Scopo |
-|-------|-------|
-| `/(tenant)/[sagra_slug]` | Pagina pubblica dell'evento, risolta dinamicamente |
-| `/admin` | Pannello centralizzato per tutte le sagre |
-| `/api/*` | Endpoint interni per operazioni CRUD protette |
-
-### Isolamento Dati
-- Ogni tenant (sagra) è identificato da uno **slug univoco**
-- Le query al database sono **sempre filtrate** per tenant ID
-- **RLS Supabase** garantisce l'isolamento a livello di riga — anche in caso di bug applicativo, un tenant non può mai accedere ai dati di un altro
-- Auth gestito server-side con `@supabase/ssr` e `hooks.server.ts`
 
 ---
 
-## Competenze Acquisite
+## Scelte principali
 
-- Pattern **multi-tenant** con SvelteKit (route groups + dynamic params)
-- Gestione di **volumi di sviluppo elevati** in tempi molto compressi
-- Architettura SaaS con isolamento dati per tenant via RLS
-- SvelteKit SSR con data loading server-side (`+page.server.ts`)
-- Auth SSR con Supabase (cookies httpOnly, hooks server)
+| Decisione | Scelta | Motivo |
+|-----------|--------|--------|
+| Isolamento tenant | Slug nell'URL e filtro per tenant su ogni query | Un solo deploy per tutti gli eventi |
+| Statistiche | Vista SQL (`v_statistiche_sagra`) | Incasso, carico cucina, attesa media e più venduti calcolati nel database |
+| Cucina | Canale Realtime sugli ordini | Nessun polling durante i picchi |
+| Runtime | Edge per route | Latenza bassa su rete mobile congestionata |
+
+---
+
+## Stato
+
+Prototipo sviluppato nelle prime quattro fasi: infrastruttura, vetrina per tenant, ordini, pannello con statistiche in tempo reale. La gestione delle feste è oggi coperta dal modulo Festa del [gestionale ristorante](01-gestionale-ristorante-pwa.md), che è in produzione.
+
+---
+
+## Evoluzioni previste
+
+Da un'analisi successiva al prototipo sono emerse queste implementazioni per la prossima versione:
+
+| Evoluzione | Beneficio |
+|------------|-----------|
+| Policy RLS e schema versionati come migration | Isolamento tra tenant garantito dal database e replicabile |
+| Autenticazione e ruoli sul pannello di gestione | Pronto per più organizzatori sulla stessa piattaforma |
+| CI con test sul flusso d'ordine | Affidabilità nei picchi di carico degli eventi |

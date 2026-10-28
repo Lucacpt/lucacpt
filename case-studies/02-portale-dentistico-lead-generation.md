@@ -1,133 +1,109 @@
-# 🦷 Portale Studio Dentistico — Lead Generation Premium
+# Portale studio dentistico: raccolta contatti e blog
 
-> **Case Study: System Design & Architettura**
-> Stack: Next.js 15 (App Router) + React 19 + TypeScript + Supabase · Deploy: Vercel (EU)
->
-> 🔗 **Live:** [studioodontoiatricofrancescobruno.it](https://www.studioodontoiatricofrancescobruno.it/)
+| | |
+|---|---|
+| Tipo | Sito istituzionale con raccolta contatti per uno studio odontoiatrico |
+| Stack | Next.js 15 (App Router), React 19, TypeScript, Tailwind 4, Supabase, Tiptap, nodemailer |
+| Hosting | Vercel, Supabase |
+| Stato | In produzione |
+| Link | [studioodontoiatricofrancescobruno.it](https://www.studioodontoiatricofrancescobruno.it/) |
 
 ---
 
-## Il Problema
+## Problema
 
-Una clinica odontoiatrica di fascia alta necessitava di un portale web che trasmettesse esclusività ed eccellenza medica, con focus sulla **Lead Generation** (cattura contatti) piuttosto che sulle prenotazioni online dirette. Serviva inoltre un CMS per la gestione autonoma dei contenuti (blog, casi clinici Prima/Dopo, trattamenti) e un'attenzione particolare alla compliance GDPR data la sensibilità del settore sanitario.
+Lo studio voleva un sito curato che portasse richieste di contatto, non prenotazioni online con calendario. Il blog doveva essere gestito dalla segreteria senza passare dallo sviluppatore. Trattandosi di dati sanitari, i contatti non dovevano restare in archivio più del necessario.
 
-## La Soluzione
+## Soluzione
 
-Un portale **Next.js con App Router** che combina performance estreme (Core Web Vitals eccellenti grazie ai Server Components), un CMS headless integrato (Payload CMS) e una pipeline di lead generation automatizzata con notifica email bidirezionale.
+Un sito Next.js con pagine dei servizi generate staticamente, un form contatti che salva il lead e avvisa sia lo studio sia il paziente, e un pannello di amministrazione minimo per blog e richieste.
 
 ---
 
 ## Architettura
 
 ```
-┌──────────────────────────────────────────────────────┐
-│              VERCEL (Regione EU — GDPR)               │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────┐ │
-│  │ Next.js App  │  │   Server     │  │  Vercel    │ │
-│  │  (SSR/SSG)   │  │  Actions     │  │   Blob     │ │
-│  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘ │
-└─────────┼─────────────────┼────────────────┼────────┘
-          │                 │                │
-          │                 ▼                │
-          │    ┌─────────────────────┐       │
-          │    │   SMTP Serverplan   │       │
-          │    │    (Email SMTP)     │       │
-          │    └─────────────────────┘       │
-          ▼                                  │
-┌──────────────────────────────┐             │
-│     SUPABASE (EU Region)     │             │
-│  ┌──────────┐  ┌──────────┐ │             │
-│  │ Postgres │  │ Storage  │◄┼─────────────┘
-│  │ (Lead +  │  │ (File    │ │  Media marketing
-│  │  CMS DB) │  │ interni) │ │  su Vercel Blob,
-│  └──────────┘  └──────────┘ │  file interni
-└──────────────────────────────┘  su Supabase Storage
+┌───────────────────────────────────────────────┐
+│                    VERCEL                      │
+│  Pagine pubbliche   Route API   Cron giornaliero│
+└───────┬─────────────────┬──────────────┬───────┘
+        │                 │              │
+        ▼                 ▼              ▼
+┌───────────────┐   ┌───────────┐   ┌─────────────────┐
+│   SUPABASE    │   │   SMTP    │   │ Pulizia lead    │
+│ leads         │   │ studio +  │   │ oltre 30 giorni │
+│ blog_posts    │   │ paziente  │   └─────────────────┘
+│ Storage       │   └───────────┘
+└───────────────┘
 ```
 
 ---
 
-## Strategia Media (Ibrida)
-
-La gestione dei media è stata separata in due canali per ottimizzare latenza e sicurezza:
-
-| Tipo Media | Storage | Motivazione |
-|-----------|---------|-------------|
-| Immagini marketing (galleria Prima/Dopo, copertine blog, UI) | **Vercel Blob** | Latenza zero via CDN, ottimizzato con `next/image` + Sharp |
-| File interni, documenti, foto staff, backup | **Supabase Storage** | Protetto da RLS, dati in EU, non pubblico |
-
-Payload CMS è configurato con **due Upload Collections** distinte, ciascuna con il proprio adattatore di storage.
-
----
-
-## Lead Generation Pipeline
+## Flusso contatti
 
 ```
-Cliente compila     Next.js Server     Salvataggio        Email notifica      Email cortesia
-form contatti  ──►  Action server  ──► su Supabase   ──► alla segreteria ──► al paziente
-                    side (no JS          (tabella           (SMTP              (template
-                     client)              leads)          Serverplan)         formattato)
+Form sul sito ──► /api/booking ──► insert in "leads" ──► email allo studio ──► email di cortesia al paziente
 ```
 
-**Dati catturati:** Nome, Email, Telefono, Messaggio, Trattamento di interesse.
+Dati raccolti: nome, email, telefono, trattamento di interesse, messaggio. Nessuna scelta di data: lo studio richiama e fissa l'appuntamento.
 
-L'intera pipeline è server-side (Server Actions): nessuna chiave API o credenziale è mai esposta al browser.
-
----
-
-## CMS — Payload CMS Integrato
-
-Payload CMS gestisce autonomamente i contenuti senza intervento dello sviluppatore:
-
-| Collezione | Descrizione |
-|-----------|-------------|
-| `BlogPosts` | Articoli blog con editor TipTap (immagini, link, allineamento) |
-| `CasiClinici` | Galleria Prima/Dopo con campi strutturati |
-| `Trattamenti` | Catalogo servizi offerti |
-
-### Dashboard Analytics Personalizzata
-Un widget custom dentro la dashboard Payload interroga le **Google Analytics Data API (v1)** tramite Service Account per mostrare:
-- Volume: visitatori unici mensili
-- Acquisizione: sorgenti traffico (Organic, Social, Direct)
-- Comportamento: pagine/trattamenti più visitati
-- **Geolocalizzazione**: mappa visite per Città/Regione — fondamentale per evidenziare il "turismo dentale" (pazienti fuori zona)
+Dal pannello la segreteria vede le richieste e le segna come gestite.
 
 ---
 
-## Compliance GDPR
+## Blog e contenuti
 
-| Requisito | Implementazione |
-|-----------|----------------|
-| Localizzazione dati | Vercel EU (Francoforte/Parigi) + Supabase EU |
-| Dati sensibili | Mai su storage pubblico (Vercel Blob), solo su Supabase Storage con RLS |
-| Credenziali | Solo server-side, mai esposte al client |
-| Informativa | Pagine Cookie Policy e Privacy Policy dedicate |
-| Immagini pazienti | Ottimizzate con Sharp server-side, servite via `next/image` con `remotePatterns` configurati |
-
----
-
-## Pagine & Struttura
-
-| Route | Tipo | Descrizione |
-|-------|------|-------------|
-| `/` | SSG/SSR | Homepage premium |
-| `/servizi` | SSG | Catalogo trattamenti |
-| `/chi-siamo` | SSG | Presentazione team e studio |
-| `/contatti` | SSR | Form lead generation con Server Action |
-| `/blog` | SSG/ISR | Articoli dal CMS |
-| `/admin` | Protetta | Dashboard Payload CMS |
-| `/cookie-policy` | SSG | Informativa cookie |
-| `/privacy-policy` | SSG | Informativa privacy |
-
-SEO automatizzata: `sitemap.ts` dinamica, `robots.ts`, meta tags per pagina.
+| Contenuto | Gestione |
+|-----------|----------|
+| Articoli | Editor Tiptap nel pannello `/admin/blog`, salvati su Supabase, immagini su Supabase Storage |
+| Servizi (18) | Dati statici nel codice, pagine generate con `generateStaticParams` |
+| Team (15 schede) | Dati statici nel codice |
+| Statistiche | Report Looker Studio incorporato nel pannello |
 
 ---
 
-## Decisioni Architetturali Chiave
+## Privacy e operatività
 
-| Decisione | Scelta | Motivazione |
-|-----------|--------|-------------|
-| Framework | **Next.js App Router** | Server Components per performance, Server Actions per sicurezza |
-| CMS | **Payload CMS integrato** | Nessun servizio esterno, tutto nel monorepo Next.js |
-| Storage duale | **Vercel Blob + Supabase Storage** | Performance CDN per pubblico, sicurezza RLS per interno |
-| Email | **SMTP dedicato Serverplan** | Deliverability garantita, dominio proprietario |
-| Hosting EU | **Vercel Francoforte** | GDPR compliance nativa |
+| Tema | Implementazione |
+|------|-----------------|
+| Retention | Cron Vercel giornaliero che cancella i lead più vecchi di 30 giorni |
+| Consenso | Banner cookie; Google Tag Manager si carica solo dopo il consenso |
+| Free tier Supabase | Cron ogni 3 giorni che interroga il database per evitare la sospensione per inattività |
+| Misure | Vercel Analytics e Speed Insights |
+
+---
+
+## Pagine
+
+| Route | Rendering |
+|-------|-----------|
+| `/` | Statico |
+| `/servizi/[slug]` | Statico, 18 pagine generate in build |
+| `/blog`, `/blog/[slug]` | Dinamico, contenuti sempre aggiornati dal pannello |
+| `/contatti` | Form contatti |
+| `/admin/*` | Riservato, 5 pagine |
+
+In totale 14 pagine, 5 route API e 2 cron.
+
+---
+
+## Scelte principali
+
+| Decisione | Scelta | Motivo |
+|-----------|--------|--------|
+| CMS | Pannello custom con Tiptap | Bastavano gli articoli: un CMS completo avrebbe aggiunto complessità senza uso reale |
+| Servizi e team | Dati nel codice | Cambiano raramente e così le pagine restano statiche e veloci |
+| Lead | Cancellazione dopo 30 giorni | Minimizzazione dei dati sanitari: il lead serve solo fino al primo contatto |
+| Statistiche | Looker Studio incorporato | Zero codice da mantenere per i report |
+
+---
+
+## Evoluzioni previste
+
+Da un'analisi successiva al rilascio sono emerse queste implementazioni per la prossima versione:
+
+| Evoluzione | Beneficio |
+|------------|-----------|
+| Schema Supabase versionato in migration | Ambiente riproducibile e modifiche tracciate |
+| Pipeline GitHub Actions con lint, build e test E2E del form contatti | Ogni modifica verificata prima del deploy |
+| Statistiche dei contatti per trattamento nel pannello | Lo studio vede quali servizi generano più richieste |
